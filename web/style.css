@@ -1,0 +1,163 @@
+:root {
+  --blue: #0066ee;
+  --bg: #f2f4f7;
+  --card: #fff;
+  --text: #1a1a1a;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --warn: #b45309;
+  --danger: #c62828;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --card: #1a1d23;
+    --text: #e8eaed;
+    --muted: #9aa0a6;
+    --line: #2c3038;
+    --blue: #4c9aff;
+    --warn: #f0b04a;
+    --danger: #ef6a6a;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  max-width: 560px;
+  margin-inline: auto;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+[hidden] { display: none !important; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--blue); color: #fff; padding: 10px 12px;
+}
+.topbar h1 { font-size: 18px; margin: 0; }
+.topbar button { background: none; border: 0; color: #fff; font-size: 28px; padding: 0 12px; }
+
+.summary, .meal, #menu-list .station {
+  background: var(--card); margin: 10px 0; padding: 14px 16px;
+}
+.summary-row { display: flex; justify-content: space-between; align-items: center; text-align: center; }
+.summary-row span { display: block; font-size: 20px; font-weight: 600; }
+.summary-row .big { color: var(--blue); }
+.summary-row small { color: var(--muted); font-size: 12px; }
+.summary-row .op { color: var(--muted); }
+.macros { display: flex; gap: 8px; margin-top: 12px; }
+.macro { flex: 1; font-size: 13px; }
+.macro .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.macro .bar div { height: 100%; }
+
+.meal h2, .station h3 {
+  display: flex; justify-content: space-between;
+  font-size: 16px; margin: 0 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
+}
+.station h3 { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.entry, .food-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line);
+  padding: 8px 0;
+}
+.entry:last-of-type, .food-row:last-child { border-bottom: 0; }
+.entry .sub, .food-row .sub { color: var(--muted); font-size: 13px; }
+.entry .kcal, .food-row .kcal { white-space: nowrap; }
+
+.link { background: none; border: 0; color: var(--blue); padding: 6px 0; font-weight: 600; }
+.subbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--card); }
+.subbar h2 { font-size: 16px; margin: 0; }
+#search {
+  display: block; width: calc(100% - 24px); margin: 10px 12px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); font: inherit;
+}
+.tabs { display: flex; gap: 6px; padding: 0 12px; flex-wrap: wrap; }
+.tabs button {
+  border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 4px 12px; font-size: 14px;
+}
+.tabs button.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+.badge { font-size: 11px; color: var(--warn); border: 1px solid var(--warn); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.center { text-align: center; }
+.warn { color: var(--warn); font-size: 14px; }
+
+dialog {
+  width: min(440px, calc(100% - 32px)); border: 0; border-radius: 12px; padding: 20px;
+  background: var(--card); color: var(--text);
+}
+dialog::backdrop { background: rgba(0, 0, 0, .45); }
+dialog h3 { margin: 0 0 4px; }
+dialog label { display: flex; justify-content: space-between; align-items: center; margin: 10px 0; gap: 12px; }
+dialog input, dialog select {
+  font: inherit; padding: 6px 8px; width: 140px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--text);
+}
+.nutrition { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 14px; }
+.nutrition td { padding: 3px 0; border-bottom: 1px solid var(--line); }
+.nutrition td:last-child { text-align: right; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.actions button { border: 1px solid var(--line); background: none; border-radius: 6px; padding: 6px 14px; }
+.actions .primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.actions .danger { color: var(--danger); margin-right: auto; }
+
+/* ---------- add view: source tabs, quick add, custom foods ---------- */
+.segmented {
+  display: flex; margin: 10px 12px 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  background: var(--card);
+}
+.segmented button { flex: 1; border: 0; background: none; padding: 8px 4px; font-size: 14px; }
+.segmented button + button { border-left: 1px solid var(--line); }
+.segmented button.active { background: var(--blue); color: #fff; }
+.card { background: var(--card); margin: 10px 0; padding: 14px 16px; }
+.card-title { font-size: 16px; margin: 0 0 8px; }
+.form-grid label { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; gap: 12px; }
+.form-grid input {
+  font: inherit; padding: 6px 8px; width: 140px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--text);
+}
+.row-wrap { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+.row-wrap:last-child { border-bottom: 0; }
+.row-wrap .food-row { border-bottom: 0; flex: 1; }
+.row-wrap .link { font-size: 13px; padding-left: 12px; }
+
+/* ---------- week view ---------- */
+.week-stats { display: flex; justify-content: space-around; text-align: center; }
+.week-stats span { display: block; font-size: 20px; font-weight: 600; }
+.week-stats small { color: var(--muted); font-size: 12px; }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .axis { fill: var(--muted); font-size: 12px; }
+.chart .axis.today { fill: var(--text); font-weight: 600; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .goal { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.chart .goal-label { fill: var(--muted); font-size: 11px; }
+.chart .bar { fill: var(--blue); }
+.chart .hit { fill: transparent; cursor: pointer; }
+.chart .hit:hover { fill: var(--line); fill-opacity: .4; }
+.chart-tip {
+  position: absolute; pointer-events: none; transform: translate(-50%, -100%);
+  background: var(--text); color: var(--bg); font-size: 12px; padding: 4px 8px; border-radius: 6px; white-space: nowrap;
+}
+.week-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.week-table th { text-align: right; color: var(--muted); font-weight: 500; font-size: 12px; padding: 4px 0; }
+.week-table th:first-child, .week-table td:first-child { text-align: left; padding-left: 0; }
+.week-table th, .week-table td { white-space: nowrap; padding-left: 12px; }
+.week-table td { text-align: right; padding-top: 8px; padding-bottom: 8px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.week-table tr.day { cursor: pointer; }
+.week-table tr.day:hover td { color: var(--blue); }
+
+/* ---------- bottom nav ---------- */
+body { padding-bottom: 64px; }
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 2;
+  display: flex; max-width: 560px; margin: 0 auto;
+  background: var(--card); border-top: 1px solid var(--line);
+}
+.bottom-nav button { flex: 1; border: 0; background: none; padding: 14px 0; color: var(--muted); font-weight: 600; }
+.bottom-nav button.active { color: var(--blue); }

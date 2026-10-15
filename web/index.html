@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phelps Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button id="prev-day" aria-label="Previous">&#8249;</button>
+    <h1 id="date-label">Today</h1>
+    <button id="next-day" aria-label="Next">&#8250;</button>
+  </header>
+
+  <!-- Diary: the MyFitnessPal-style home screen -->
+  <main id="diary-view">
+    <section class="summary">
+      <div class="summary-row">
+        <div><span id="goal-cal">0</span><small>Goal</small></div>
+        <div class="op">&minus;</div>
+        <div><span id="food-cal">0</span><small>Food</small></div>
+        <div class="op">=</div>
+        <div><span id="remaining-cal" class="big">0</span><small>Remaining</small></div>
+      </div>
+      <div class="macros" id="macros"></div>
+      <button class="link" id="edit-goal">Edit goal</button>
+    </section>
+
+    <div id="meals"></div>
+  </main>
+
+  <!-- Add food: Phelps menu, recent, custom foods, quick add -->
+  <main id="add-view" hidden>
+    <div class="subbar">
+      <button class="link" id="add-back">&#8249; Diary</button>
+      <h2 id="add-title">Add to Breakfast</h2>
+    </div>
+    <div id="source-tabs" class="segmented"></div>
+    <input id="search" type="search" placeholder="Search">
+    <div id="add-meal-tabs" class="tabs"></div>
+    <div id="menu-list"></div>
+  </main>
+
+  <!-- Week: daily calories vs goal -->
+  <main id="week-view" hidden>
+    <section class="summary week-stats" id="week-stats"></section>
+    <section class="card">
+      <h2 class="card-title">Calories</h2>
+      <div class="chart" id="week-chart"></div>
+    </section>
+    <section class="card">
+      <table class="week-table" id="week-table"></table>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" id="bottom-nav">
+    <button data-view="diary" class="active">Diary</button>
+    <button data-view="week">Week</button>
+  </nav>
+
+  <!-- Food detail: servings picker -->
+  <dialog id="food-dialog">
+    <form method="dialog" id="food-form">
+      <h3 id="fd-name"></h3>
+      <p class="muted" id="fd-serving"></p>
+      <p class="warn" id="fd-warn" hidden>The nutrition data for this item looks off. Treat these numbers as a rough guess.</p>
+      <label>Servings
+        <input id="fd-servings" type="number" min="0.25" step="0.25" value="1" required>
+      </label>
+      <label>Meal
+        <select id="fd-meal"></select>
+      </label>
+      <table class="nutrition" id="fd-nutrition"></table>
+      <p class="muted small" id="fd-tags"></p>
+      <div class="actions">
+        <button value="delete" id="fd-delete" class="danger" hidden>Remove</button>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary" id="fd-save">Add</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Create / edit a custom food -->
+  <dialog id="custom-dialog">
+    <form method="dialog">
+      <h3 id="cf-title">Create a food</h3>
+      <label>Name <input id="cf-name" required maxlength="80"></label>
+      <label>Serving size <input id="cf-size" type="number" min="0" step="any" placeholder="1"></label>
+      <label>Serving unit <input id="cf-unit" maxlength="20" placeholder="e.g. bar, cup, oz"></label>
+      <label>Calories <input id="cf-cal" type="number" min="0" step="any" required></label>
+      <label>Protein (g) <input id="cf-protein" type="number" min="0" step="any"></label>
+      <label>Carbs (g) <input id="cf-carbs" type="number" min="0" step="any"></label>
+      <label>Fat (g) <input id="cf-fat" type="number" min="0" step="any"></label>
+      <p class="muted small">Values are per serving. Editing a food doesn't change entries you've already logged.</p>
+      <div class="actions">
+        <button value="delete" id="cf-delete" class="danger" formnovalidate hidden>Delete</button>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Goal -->
+  <dialog id="goal-dialog">
+    <form method="dialog">
+      <h3>Daily goal</h3>
+      <p class="muted small">Needs vary a lot, especially for athletes. If you're unsure what's right for you,
+        Hope's Health Center and athletic trainers can help.</p>
+      <label>Calories <input id="goal-input" type="number" min="1200" max="6000" step="50" required></label>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <p id="status" class="muted center"></p>
+  <script src="app.js"></script>
+</body>
+</html>
