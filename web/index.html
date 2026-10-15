@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Only this site's own files may load or run. Add the Supabase URL to connect-src when it's added. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+  <!-- Only this site's own files may load or run; the only outside server it may talk to is Supabase. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://jbtrrtwovjizkxwxdkll.supabase.co; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <title>Phelps Tracker</title>
   <meta name="theme-color" content="#0066ee">
@@ -63,9 +63,13 @@
     </section>
   </main>
 
+  <!-- Account: sign in with a Hope email, sync, export, delete -->
+  <main id="account-view" hidden></main>
+
   <nav class="bottom-nav" id="bottom-nav">
     <button data-view="diary" class="active">Diary</button>
     <button data-view="week">Week</button>
+    <button data-view="account">Account</button>
   </nav>
 
   <!-- Food detail: servings picker -->
@@ -125,6 +129,8 @@
   </dialog>
 
   <p id="status" class="muted center"></p>
+  <script src="config.js"></script>
+  <script src="cloud.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

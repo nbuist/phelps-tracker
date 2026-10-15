@@ -20,6 +20,9 @@ pick the actual item off today's menu and log it by the serving.
 - **Week view**: a 7-day calorie chart against your goal, a daily macro table, and averages.
 - **Daily goal**: adjustable, with a reminder that Hope's Health Center and athletic trainers can
   help figure out what's right for you.
+- **Account and sync (optional)**: sign in with your @hope.edu email and a one-time code to back
+  up your diary and use it on more than one device. Works offline and syncs when you reconnect.
+  Export your data or delete your account any time from the Account tab.
 
 ## Use it
 
@@ -31,8 +34,20 @@ Open **<https://nbuist.github.io/phelps-tracker/>** and add it to your home scre
 It opens full-screen like a regular app and keeps working when the Phelps Wi-Fi drops out (it
 shows the last menu it downloaded).
 
-Your diary, custom foods, and goal are saved on your device in that browser, so they don't sync
-between devices yet.
+Without an account, your diary, custom foods, and goal stay on that device. Sign in from the
+**Account** tab to sync them. Signing out removes the diary from that device (it stays in your
+account), so it's safe to use on a shared computer.
+
+## Privacy and security
+
+- Only @hope.edu addresses can sign up, and you sign in with a one-time code (no passwords).
+- Each student can only read and change their own data. This is enforced by the database
+  itself (Postgres Row Level Security), not just the app.
+- The app stores your email and what you log, nothing else. No names, weights, or photos.
+- The key in `web/config.js` is Supabase's *publishable* key, which is meant to be public; the
+  database rules are what protect the data. The secret key is never used by the app.
+- Security problems can be reported privately through GitHub's
+  [private vulnerability reporting](https://github.com/nbuist/phelps-tracker/security/advisories/new).
 
 ## Run it locally
 
@@ -46,6 +61,19 @@ python -m http.server 8000 -d web   # serve the app
 
 Then open <http://127.0.0.1:8000/>. Re-run `fetch_phelps.py` to pick up new menus (`--days 14` for
 a longer range). Please keep it to about once a day; see [Data source](#data-source).
+
+## Setting up your own Supabase project
+
+To run a copy with your own backend (the app works without one; leave `web/config.js` empty):
+
+1. Create a Supabase project and run [`schema.sql`](schema.sql) in its SQL Editor.
+2. **Authentication → Auth Hooks**: add a *Before User Created* Postgres hook using
+   `public.hook_restrict_signup_to_hope`.
+3. **Authentication → Emails → SMTP Settings**: configure a custom SMTP sender (Supabase's
+   built-in sender only emails project team members). Then edit the *Magic Link* and *Confirm
+   signup* templates to show the code with `{{ .Token }}`.
+4. Put the project URL and publishable key in `web/config.js`, and add the project URL to
+   `connect-src` in the Content Security Policy in `web/index.html`.
 
 ## Deployment
 
@@ -63,7 +91,9 @@ tab if the menu stops updating.
 | `fetch_phelps.py` | Downloads Phelps menus and nutrition and writes `web/phelps_menu.json` (`foods` + `menu`). |
 | `web/` | The app: plain HTML, CSS, and JavaScript with no build step. Includes a web app manifest, icons, and a service worker (`sw.js`) for install and offline use. |
 | `.github/workflows/deploy.yml` | Daily menu fetch + GitHub Pages deploy. |
-| `schema.sql` | Postgres/Supabase schema for the planned backend (`foods`, `menu_items`, `food_logs`, `daily_totals`). |
+| `web/cloud.js` | Sign-in and sync with Supabase (talks to its REST APIs directly, no library). |
+| `web/config.js` | Supabase project URL and publishable key. |
+| `schema.sql` | Supabase tables, Row Level Security policies, account deletion, and the @hope.edu sign-up hook. |
 
 `web/phelps_menu.json` is generated, so it isn't checked in.
 
@@ -88,5 +118,5 @@ traffic to their servers stays minimal.
 - [x] Recent foods, custom foods, quick add, weekly history
 - [x] Hosted on GitHub Pages, installable on phones, works offline
 - [x] Daily automatic menu sync
-- [ ] Supabase backend with accounts so logs sync across devices
+- [x] Accounts with @hope.edu sign-in and sync across devices
 - [ ] Contact Hope Dining Services for permission before a campus-wide launch, and report data issues

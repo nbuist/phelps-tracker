@@ -51,8 +51,10 @@ const saveGoal = (goal) => store("goal", goal);
 function addLog(meal, servings, food) {
   // Store a copy of the nutrition so past days don't change when the menu data does.
   const logs = loadLogs();
-  logs.push({ id: crypto.randomUUID(), date: state.date, meal, servings, food, logged_at: Date.now() });
+  const entry = { id: crypto.randomUUID(), date: state.date, meal, servings, food, logged_at: Date.now() };
+  logs.push(entry);
   saveLogs(logs);
+  Cloud.logChanged(entry);
 }
 
 // ---------- helpers ----------
@@ -121,7 +123,7 @@ function totals(logs) {
 
 function show(view) {
   state.view = view;
-  for (const v of ["diary", "add", "week"]) document.getElementById(`${v}-view`).hidden = v !== view;
+  for (const v of ["diary", "add", "week", "account"]) document.getElementById(`${v}-view`).hidden = v !== view;
   document.getElementById("bottom-nav").hidden = view === "add";
   for (const b of document.querySelectorAll("#bottom-nav button")) b.classList.toggle("active", b.dataset.view === view);
   window.scrollTo(0, 0);
@@ -129,7 +131,11 @@ function show(view) {
 }
 
 function refresh() {
-  if (state.view === "week") {
+  document.querySelector(".topbar").classList.toggle("no-nav", state.view === "account");
+  if (state.view === "account") {
+    document.getElementById("date-label").textContent = "Account";
+    renderAccount();
+  } else if (state.view === "week") {
     const start = shiftDate(state.date, -6);
     document.getElementById("date-label").textContent = `${shortDate(start)} – ${shortDate(state.date)}`;
     renderWeek();
@@ -339,8 +345,10 @@ function onCustomDialogClose() {
     };
     foods = editing ? foods.map((f) => (f.custom_id === food.custom_id ? food : f)) : [...foods, food];
     saveCustomFoods(foods);
+    Cloud.customFoodChanged(food);
   } else if (action === "delete" && editing) {
     saveCustomFoods(foods.filter((f) => f.custom_id !== editing.custom_id));
+    Cloud.customFoodDeleted(editing);
   }
   renderAdd();
 }
@@ -388,13 +396,16 @@ function onFoodDialogClose() {
 
   if (action === "save" && servings > 0) {
     if (state.editing) {
-      saveLogs(loadLogs().map((l) => (l.id === state.editing.id ? { ...l, servings, meal } : l)));
+      const updated = { ...state.editing, servings, meal };
+      saveLogs(loadLogs().map((l) => (l.id === updated.id ? updated : l)));
+      Cloud.logChanged(updated);
     } else {
       addLog(meal, servings, state.pendingFood);
     }
     show("diary");
   } else if (action === "delete" && state.editing) {
     saveLogs(loadLogs().filter((l) => l.id !== state.editing.id));
+    Cloud.logDeleted(state.editing);
     renderDiary();
   }
 }
@@ -493,6 +504,134 @@ function renderWeekChart(days, goal) {
   chart.replaceChildren(root, tip);
 }
 
+// ---------- account ----------
+
+const account = { email: "", codeSent: false, busy: false, error: "" };
+
+function renderAccount() {
+  const root = document.getElementById("account-view");
+  const u = Cloud.user();
+  const privacy = el("p", { class: "muted small" },
+    "Your diary is private: only you can see it. Phelps Tracker stores your email and what you log, nothing else.");
+
+  if (!Cloud.configured) {
+    root.replaceChildren(el("section", { class: "card" },
+      el("h2", { class: "card-title" }, "Accounts aren't set up yet"),
+      el("p", { class: "muted" }, "Your diary is saved on this device only."),
+      exportButton()));
+    return;
+  }
+
+  if (u) {
+    const st = Cloud.status();
+    const pending = Cloud.pendingCount();
+    const line = st.state === "syncing" ? "Syncing…"
+      : st.state === "ok" ? `Synced at ${new Date(st.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+      : st.message || (pending ? `${pending} change${pending === 1 ? "" : "s"} waiting to sync` : "Not synced yet");
+    root.replaceChildren(
+      el("section", { class: "card" },
+        el("h2", { class: "card-title" }, "Signed in"),
+        el("p", {}, u.email),
+        el("p", { class: `small ${st.state === "error" ? "warn" : "muted"}` }, line),
+        el("div", { class: "actions start" },
+          el("button", { class: "primary", onclick: () => Cloud.syncNow() }, "Sync now"),
+          exportButton(),
+          el("button", { onclick: signOut }, "Sign out"))),
+      el("section", { class: "card" }, privacy,
+        el("button", { class: "link danger-link", onclick: deleteAccount }, "Delete my account and data")));
+    return;
+  }
+
+  // Signed out: email -> code.
+  const msg = account.error ? el("p", { class: "warn" }, account.error) : null;
+  const form = account.codeSent
+    ? el("form", { class: "form-grid", onsubmit: submitCode },
+        el("p", {}, `We emailed a code to ${account.email}. It can take a minute to arrive.`),
+        el("label", {}, "Code", el("input", { id: "acct-code", inputmode: "numeric", autocomplete: "one-time-code",
+          pattern: "[0-9]{6,10}", maxlength: "10", required: "" })),
+        msg,
+        el("div", { class: "actions" },
+          el("button", { type: "button", onclick: () => { account.codeSent = false; account.error = ""; renderAccount(); } },
+            "Use a different email"),
+          el("button", { class: "primary", type: "submit" }, account.busy ? "Signing in…" : "Sign in")))
+    : el("form", { class: "form-grid", onsubmit: submitEmail },
+        el("label", {}, "Hope email", el("input", { id: "acct-email", type: "email", autocomplete: "email",
+          placeholder: "you@hope.edu", required: "", value: account.email })),
+        msg,
+        el("div", { class: "actions" },
+          el("button", { class: "primary", type: "submit" }, account.busy ? "Sending…" : "Email me a code")));
+
+  root.replaceChildren(
+    el("section", { class: "card" },
+      el("h2", { class: "card-title" }, "Sync your diary"),
+      el("p", { class: "muted small" },
+        "Sign in with your Hope email to back up your diary and use it on your phone and laptop. " +
+        "Anything you've already logged on this device comes with you."),
+      form),
+    el("section", { class: "card" }, privacy, exportButton()));
+  document.getElementById(account.codeSent ? "acct-code" : "acct-email")?.focus();
+}
+
+async function submitEmail(e) {
+  e.preventDefault();
+  if (account.busy) return;
+  const email = document.getElementById("acct-email").value; // read before re-rendering clears it
+  account.email = email.trim();
+  account.busy = true; account.error = ""; renderAccount();
+  try {
+    account.email = await Cloud.requestCode(email);
+    account.codeSent = true;
+  } catch (err) {
+    account.error = err.message;
+  }
+  account.busy = false; renderAccount();
+}
+
+async function submitCode(e) {
+  e.preventDefault();
+  if (account.busy) return;
+  const code = document.getElementById("acct-code").value; // read before re-rendering clears it
+  account.busy = true; account.error = ""; renderAccount();
+  try {
+    await Cloud.verifyCode(account.email, code);
+    account.codeSent = false;
+  } catch (err) {
+    account.error = /expired|invalid/i.test(err.message) ? "That code is wrong or has expired. Try again or request a new one." : err.message;
+  }
+  account.busy = false; renderAccount();
+}
+
+async function signOut() {
+  const pending = Cloud.pendingCount();
+  const warn = pending ? `\n\n${pending} change(s) haven't synced yet and will be lost if you're offline.` : "";
+  if (!confirm(`Sign out? Your diary will be removed from this device (it stays in your account).${warn}`)) return;
+  await Cloud.signOut();
+}
+
+async function deleteAccount() {
+  if (!confirm("Delete your account and everything you've logged? This can't be undone.")) return;
+  try {
+    await Cloud.deleteAccount();
+    alert("Your account and data have been deleted.");
+  } catch (err) {
+    alert(`Couldn't delete your account: ${err.message}`);
+  }
+}
+
+function exportButton() {
+  return el("button", { onclick: exportData }, "Export my data");
+}
+
+function exportData() {
+  const data = { exported_at: new Date().toISOString(), goal: loadGoal(), logs: loadLogs(), customFoods: loadCustomFoods() };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  const a = el("a", { href: url, download: `phelps-tracker-${todayISO()}.json` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 // ---------- wiring ----------
 
 async function init() {
@@ -522,11 +661,18 @@ async function init() {
     goalDialog.showModal();
   };
   goalDialog.addEventListener("close", () => {
-    if (goalDialog.returnValue === "save") saveGoal(Number(document.getElementById("goal-input").value));
+    if (goalDialog.returnValue === "save") {
+      const goal = Number(document.getElementById("goal-input").value);
+      saveGoal(goal);
+      Cloud.goalChanged(goal);
+    }
     refresh();
   });
 
+  Cloud.onData(refresh); // a sync brought in changes from another device
+  Cloud.onStatus(() => { if (state.view === "account") renderAccount(); });
   show("diary");
+  Cloud.start();
 }
 
 init();
