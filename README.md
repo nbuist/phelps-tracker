@@ -39,7 +39,7 @@ between devices yet.
 You need Python 3.
 
 ```bash
-pip install requests
+pip install -r requirements.txt
 python fetch_phelps.py              # next 7 days of menus -> web/phelps_menu.json
 python -m http.server 8000 -d web   # serve the app
 ```
