@@ -21,34 +21,52 @@ pick the actual item off today's menu and log it by the serving.
 - **Daily goal**: adjustable, with a reminder that Hope's Health Center and athletic trainers can
   help figure out what's right for you.
 
-## Getting started
+## Use it
+
+Open **<https://nbuist.github.io/phelps-tracker/>** and add it to your home screen:
+
+- **iPhone (Safari):** Share → Add to Home Screen
+- **Android (Chrome):** ⋮ menu → Add to Home screen / Install app
+
+It opens full-screen like a regular app and keeps working when the Phelps Wi-Fi drops out (it
+shows the last menu it downloaded).
+
+Your diary, custom foods, and goal are saved on your device in that browser, so they don't sync
+between devices yet.
+
+## Run it locally
 
 You need Python 3.
 
 ```bash
 pip install requests
-python fetch_phelps.py          # downloads the next 7 days of menus -> phelps_menu.json
-python -m http.server 8000      # serve the project folder
+python fetch_phelps.py              # next 7 days of menus -> web/phelps_menu.json
+python -m http.server 8000 -d web   # serve the app
 ```
 
-Then open <http://127.0.0.1:8000/web/>.
+Then open <http://127.0.0.1:8000/>. Re-run `fetch_phelps.py` to pick up new menus (`--days 14` for
+a longer range). Please keep it to about once a day; see [Data source](#data-source).
 
-Re-run `fetch_phelps.py` to pick up new menus (`--days 14` for a longer range). Please keep it to
-about once a day; see [Data source](#data-source).
+## Deployment
 
-Your diary, custom foods, and goal are saved in your browser's local storage, so they stay on that
-browser and device until the app moves to a real backend.
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) fetches the next 14 days of menus
+and publishes `web/` to GitHub Pages on every push to `main` and every morning at 10:00 UTC. You
+can also run it by hand from the Actions tab (**Fetch menus and deploy → Run workflow**).
+
+GitHub pauses scheduled workflows after 60 days without a commit; re-enable it from the Actions
+tab if the menu stops updating.
 
 ## Project structure
 
 | Path | What it is |
 |---|---|
-| `fetch_phelps.py` | Downloads Phelps menus and nutrition and writes `phelps_menu.json` (`foods` + `menu`). |
-| `web/` | The app: plain HTML, CSS, and JavaScript with no build step. |
+| `fetch_phelps.py` | Downloads Phelps menus and nutrition and writes `web/phelps_menu.json` (`foods` + `menu`). |
+| `web/` | The app: plain HTML, CSS, and JavaScript with no build step. Includes a web app manifest, icons, and a service worker (`sw.js`) for install and offline use. |
+| `.github/workflows/deploy.yml` | Daily menu fetch + GitHub Pages deploy. |
 | `schema.sql` | Postgres/Supabase schema for the planned backend (`foods`, `menu_items`, `food_logs`, `daily_totals`). |
 | `CLAUDE.md` | Detailed developer notes: API response shape, known data issues, decisions. |
 
-`phelps_menu.json` is generated, so it isn't checked in.
+`web/phelps_menu.json` is generated, so it isn't checked in.
 
 ## Data source
 
@@ -69,6 +87,7 @@ traffic to their servers stays minimal.
 - [x] Menu fetcher
 - [x] Diary, menu browsing, servings picker, daily goal
 - [x] Recent foods, custom foods, quick add, weekly history
+- [x] Hosted on GitHub Pages, installable on phones, works offline
+- [x] Daily automatic menu sync
 - [ ] Supabase backend with accounts so logs sync across devices
-- [ ] Daily automatic menu sync
 - [ ] Contact Hope Dining Services for permission before a campus-wide launch, and report data issues

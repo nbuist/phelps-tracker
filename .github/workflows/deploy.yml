@@ -1,0 +1,48 @@
+# Fetch the latest Phelps menus and publish web/ to GitHub Pages.
+# Runs on every push to main and once a day, so the hosted menu stays current.
+name: Fetch menus and deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 10 * * *" # 10:00 UTC = 6 AM Eastern (5 AM in winter)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch menus
+        run: |
+          pip install requests
+          python fetch_phelps.py --days 14
+
+      # Give the service worker a new cache name per commit so phones pick up app changes.
+      - name: Stamp service worker version
+        run: sed -i "s/const VERSION = \"v1\"/const VERSION = \"${GITHUB_SHA::7}\"/" web/sw.js
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4

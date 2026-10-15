@@ -1,4 +1,4 @@
-// Barebones Phelps tracker. Reads ../phelps_menu.json (from fetch_phelps.py) and keeps the
+// Phelps tracker. Reads phelps_menu.json (from fetch_phelps.py) and keeps the
 // food diary in localStorage. Swap the storage functions for Supabase later.
 
 const MEALS = ["breakfast", "lunch", "dinner", "snacks"];
@@ -496,13 +496,13 @@ function renderWeekChart(days, goal) {
 
 async function init() {
   try {
-    const res = await fetch("../phelps_menu.json", { cache: "no-store" });
+    const res = await fetch("phelps_menu.json");
     const data = await res.json();
     for (const f of data.foods) state.foods.set(f.component_id, f);
     state.menu = data.menu;
   } catch (e) {
     document.getElementById("status").textContent =
-      "Couldn't load phelps_menu.json. Run fetch_phelps.py, then `python -m http.server` from the project folder.";
+      "Couldn't load the menu. Check your connection, or locally run fetch_phelps.py and `python -m http.server -d web`.";
   }
 
   const step = () => (state.view === "week" ? 7 : 1);
@@ -529,3 +529,7 @@ async function init() {
 }
 
 init();
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {}); // the app still works without it
+}

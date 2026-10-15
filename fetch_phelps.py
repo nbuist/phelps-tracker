@@ -3,7 +3,7 @@ Pull Phelps Dining Hall menus + nutrition from FD MealPlanner (Gordon Food Servi
 
 Usage:
     pip install requests
-    python fetch_phelps.py              # next 7 days -> phelps_menu.json
+    python fetch_phelps.py              # next 7 days -> web/phelps_menu.json
     python fetch_phelps.py --days 14
 
 Output JSON has two lists you can load straight into the database (see schema.sql):
@@ -145,7 +145,7 @@ def parse_day(row, meal_name, concepts):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=7)
-    ap.add_argument("--out", default="phelps_menu.json")
+    ap.add_argument("--out", default="web/phelps_menu.json")
     args = ap.parse_args()
 
     start = date.today()
