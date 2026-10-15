@@ -64,7 +64,6 @@ tab if the menu stops updating.
 | `web/` | The app: plain HTML, CSS, and JavaScript with no build step. Includes a web app manifest, icons, and a service worker (`sw.js`) for install and offline use. |
 | `.github/workflows/deploy.yml` | Daily menu fetch + GitHub Pages deploy. |
 | `schema.sql` | Postgres/Supabase schema for the planned backend (`foods`, `menu_items`, `food_logs`, `daily_totals`). |
-| `CLAUDE.md` | Detailed developer notes: API response shape, known data issues, decisions. |
 
 `web/phelps_menu.json` is generated, so it isn't checked in.
 
