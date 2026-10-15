@@ -44,45 +44,8 @@ account), so it's safe to use on a shared computer.
 - Each student can only read and change their own data. This is enforced by the database
   itself (Postgres Row Level Security), not just the app.
 - The app stores your email and what you log, nothing else. No names, weights, or photos.
-- The key in `web/config.js` is Supabase's *publishable* key, which is meant to be public; the
-  database rules are what protect the data. The secret key is never used by the app.
 - Security problems can be reported privately through GitHub's
   [private vulnerability reporting](https://github.com/nbuist/phelps-tracker/security/advisories/new).
-
-## Run it locally
-
-You need Python 3.
-
-```bash
-pip install -r requirements.txt
-python fetch_phelps.py              # next 7 days of menus -> web/phelps_menu.json
-python -m http.server 8000 -d web   # serve the app
-```
-
-Then open <http://127.0.0.1:8000/>. Re-run `fetch_phelps.py` to pick up new menus (`--days 14` for
-a longer range). Please keep it to about once a day; see [Data source](#data-source).
-
-## Setting up your own Supabase project
-
-To run a copy with your own backend (the app works without one; leave `web/config.js` empty):
-
-1. Create a Supabase project and run [`schema.sql`](schema.sql) in its SQL Editor.
-2. **Authentication → Auth Hooks**: add a *Before User Created* Postgres hook using
-   `public.hook_restrict_signup_to_hope`.
-3. **Authentication → Emails → SMTP Settings**: configure a custom SMTP sender (Supabase's
-   built-in sender only emails project team members). Then edit the *Magic Link* and *Confirm
-   signup* templates to show the code with `{{ .Token }}`.
-4. Put the project URL and publishable key in `web/config.js`, and add the project URL to
-   `connect-src` in the Content Security Policy in `web/index.html`.
-
-## Deployment
-
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) fetches the next 14 days of menus
-and publishes `web/` to GitHub Pages on every push to `main` and every morning at 10:00 UTC. You
-can also run it by hand from the Actions tab (**Fetch menus and deploy → Run workflow**).
-
-GitHub pauses scheduled workflows after 60 days without a commit; re-enable it from the Actions
-tab if the menu stops updating.
 
 ## Project structure
 
@@ -90,10 +53,9 @@ tab if the menu stops updating.
 |---|---|
 | `fetch_phelps.py` | Downloads Phelps menus and nutrition and writes `web/phelps_menu.json` (`foods` + `menu`). |
 | `web/` | The app: plain HTML, CSS, and JavaScript with no build step. Includes a web app manifest, icons, and a service worker (`sw.js`) for install and offline use. |
-| `.github/workflows/deploy.yml` | Daily menu fetch + GitHub Pages deploy. |
-| `web/cloud.js` | Sign-in and sync with Supabase (talks to its REST APIs directly, no library). |
-| `web/config.js` | Supabase project URL and publishable key. |
-| `schema.sql` | Supabase tables, Row Level Security policies, account deletion, and the @hope.edu sign-up hook. |
+| `web/cloud.js` | Sign-in and sync. |
+| `schema.sql` | Database tables and the rules that keep each student's data private. |
+| `.github/workflows/deploy.yml` | Updates the menu every morning and publishes the site. |
 
 `web/phelps_menu.json` is generated, so it isn't checked in.
 
