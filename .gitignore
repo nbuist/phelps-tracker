@@ -5,6 +5,6 @@ __pycache__/
 *.pyc
 .venv/
 
-# Claude Code notes and settings (kept local)
+# Claude Code notes and settings
 CLAUDE.md
 .claude/
