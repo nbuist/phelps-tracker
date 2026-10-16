@@ -83,4 +83,6 @@ traffic to their servers stays minimal.
 - [x] Hosted on GitHub Pages, installable on phones, works offline
 - [x] Daily automatic menu sync
 - [x] Accounts with @hope.edu sign-in and sync across devices
-- [ ] Contact Hope Dining Services for permission before a campus-wide launch, and report data issues
+- [ ] Report the data issues above to Hope Dining Services
+- [ ] Copy a previous meal in one tap
+- [ ] Allergen and diet filters on the Phelps menu
