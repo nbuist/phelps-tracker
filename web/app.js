@@ -11,11 +11,19 @@ const SOURCES = [
 ];
 const DEFAULT_GOAL = 2000;
 const MACROS = [
-  // kcal per gram, and the share of calories used for the default macro targets
-  { key: "carbs_g", label: "Carbs", kcal: 4, share: 0.5, color: "#14b8a6" },
-  { key: "fat_g", label: "Fat", kcal: 9, share: 0.3, color: "#a855f7" },
-  { key: "protein_g", label: "Protein", kcal: 4, share: 0.2, color: "#f59e0b" },
+  // kcal per gram; `pct` is the key of this macro's share of calories in the saved targets
+  { key: "carbs_g", pct: "carbs_pct", id: "carbs", label: "Carbs", kcal: 4, color: "#14b8a6" },
+  { key: "fat_g", pct: "fat_pct", id: "fat", label: "Fat", kcal: 9, color: "#a855f7" },
+  { key: "protein_g", pct: "protein_pct", id: "protein", label: "Protein", kcal: 4, color: "#f59e0b" },
 ];
+const DEFAULT_MACROS = { carbs_pct: 50, fat_pct: 30, protein_pct: 20 };
+// Same limits as the database check constraint in schema.sql.
+const MACRO_MIN = 5, MACRO_MAX = 80;
+const validMacros = (m) =>
+  MACROS.every(({ pct }) => Number.isInteger(m?.[pct]) && m[pct] >= MACRO_MIN && m[pct] <= MACRO_MAX)
+  && MACROS.reduce((s, { pct }) => s + m[pct], 0) === 100;
+// Grams of a macro for a calorie goal and a % share.
+const macroGrams = (goal, m, pctValue) => (goal * pctValue) / 100 / m.kcal;
 // Items above this are almost certainly whole-container numbers (see CLAUDE.md), so we hide them.
 const HIDE_ABOVE_KCAL = 1000;
 const RECENT_LIMIT = 30;
@@ -47,6 +55,11 @@ const loadCustomFoods = () => load("customFoods", []);
 const saveCustomFoods = (foods) => store("customFoods", foods);
 const loadGoal = () => Number(load("goal", DEFAULT_GOAL)) || DEFAULT_GOAL;
 const saveGoal = (goal) => store("goal", goal);
+const loadMacros = () => {
+  const m = load("macros", null);
+  return validMacros(m) ? m : { ...DEFAULT_MACROS };
+};
+const saveMacros = (m) => store("macros", m);
 
 function addLog(meal, servings, food) {
   // Store a copy of the nutrition so past days don't change when the menu data does.
@@ -157,8 +170,9 @@ function renderDiary() {
   document.getElementById("food-cal").textContent = round(t.calories);
   document.getElementById("remaining-cal").textContent = round(goal) - round(t.calories); // so the row adds up
 
+  const targets = loadMacros();
   document.getElementById("macros").replaceChildren(...MACROS.map((m) => {
-    const target = (goal * m.share) / m.kcal;
+    const target = macroGrams(goal, m, targets[m.pct]);
     const pct = Math.min(100, (t[m.key] / target) * 100);
     return el("div", { class: "macro" },
       el("div", {}, `${m.label} `, el("span", { class: "muted" }, `${round(t[m.key])} / ${round(target)} g`)),
@@ -504,6 +518,88 @@ function renderWeekChart(days, goal) {
   chart.replaceChildren(root, tip);
 }
 
+// ---------- goal dialog ----------
+
+function setGoalMacroInputs(m) {
+  for (const { id, pct } of MACROS) document.getElementById(`goal-${id}`).value = m[pct];
+}
+function readGoalMacroInputs() {
+  return Object.fromEntries(MACROS.map(({ id, pct }) => [pct, Number(document.getElementById(`goal-${id}`).value)]));
+}
+
+function openGoalDialog() {
+  document.getElementById("goal-input").value = loadGoal();
+  setGoalMacroInputs(loadMacros());
+  renderGoalPreview();
+  document.getElementById("goal-dialog").showModal();
+}
+
+// Live grams per macro, the running total, and blocking Save until it adds up to 100%.
+function renderGoalPreview() {
+  const goal = Number(document.getElementById("goal-input").value) || 0;
+  const m = readGoalMacroInputs();
+  for (const macro of MACROS) {
+    document.getElementById(`goal-${macro.id}-g`).textContent = `${round(macroGrams(goal, macro, m[macro.pct] || 0))} g`;
+  }
+  const total = MACROS.reduce((s, { pct }) => s + (m[pct] || 0), 0);
+  const totalEl = document.getElementById("goal-total");
+  totalEl.textContent = total === 100 ? "Total: 100%" : `Total: ${total}%. Adjust so it adds up to 100%.`;
+  totalEl.classList.toggle("warn", total !== 100);
+  // Attach the error to the last field so the browser blocks Save and points at the macros.
+  document.getElementById("goal-protein").setCustomValidity(total === 100 ? "" : "Carbs, fat and protein must add up to 100%.");
+}
+
+// ---------- FAQ (shown on the Account tab) ----------
+
+const FAQ = [
+  ["How do I log something from Phelps?",
+    "On the Diary, tap \"+ Add food\" under a meal. The Phelps menu tab shows that day's menu by station. " +
+    "Tap an item, set how many servings you had, and tap Add."],
+  ["What counts as a serving?",
+    "Each item shows its serving size, like \"4 ounce\" or \"1 slice\". If you had more or less, change the " +
+    "servings: 1.5 is one and a half servings, 0.5 is half. Dining hall portions vary, so a close estimate is fine."],
+  ["Something I ate isn't on the menu.",
+    "Use \"My foods\" to save things you eat often (snacks, drinks, Kletz items), or \"Quick add\" to log " +
+    "calories directly."],
+  ["What does the \"check\" badge mean?",
+    "The menu data for that item looks off (for example, it has no serving size), so treat its numbers as a rough " +
+    "guess. Items with obviously wrong numbers, like whole bottles of dressing, are hidden."],
+  ["Why is there no menu for a day or meal?",
+    "Phelps posts menus about two weeks ahead. If a meal is missing, it hasn't been posted yet or isn't served " +
+    "that day."],
+  ["How do I change my calorie goal or macros?",
+    "On the Diary, tap \"Edit goal\". Macro targets are a share of your calories and must add up to 100%. " +
+    "Carbs and protein have 4 calories per gram and fat has 9, which is how the gram targets are worked out."],
+  ["How do I know what goal is right for me?",
+    "Needs vary a lot, especially if you play a sport. Hope's Health Center and athletic trainers can help you " +
+    "pick a goal that fits you. If tracking ever starts to feel stressful, it's okay to take a break, and Hope's " +
+    "counseling services are there to talk to."],
+  ["Do I need an account?",
+    "No. Without one, everything stays on this device. Signing in backs up your diary and lets you use it on " +
+    "your phone and laptop."],
+  ["I didn't get my sign-in code.",
+    "Give it a minute, then check your junk or spam folder. Codes expire, so if it's been a while, go back and " +
+    "request a new one. You can only request a few codes per hour."],
+  ["Does it work without Wi-Fi?",
+    "Yes, once you've opened it at least once. It shows the last menu it downloaded, and anything you log syncs " +
+    "when you're back online."],
+  ["How do I put it on my phone's home screen?",
+    "iPhone: open the site in Safari, tap Share, then Add to Home Screen. Android: open it in Chrome, tap the ⋮ " +
+    "menu, then Install app."],
+  ["Who can see my diary?",
+    "Only you. The app stores your email and what you log, nothing else. You can export your data or delete your " +
+    "account from this tab at any time."],
+  ["Are the nutrition numbers exact?",
+    "They come from Phelps' published menu data, which can contain mistakes, and this app isn't run by Hope " +
+    "Dining Services. Use them as a good estimate."],
+];
+
+function faqCard() {
+  return el("section", { class: "card faq" },
+    el("h2", { class: "card-title" }, "FAQ"),
+    FAQ.map(([q, a]) => el("details", {}, el("summary", {}, q), el("p", { class: "muted" }, a))));
+}
+
 // ---------- account ----------
 
 const account = { email: "", codeSent: false, busy: false, error: "" };
@@ -518,7 +614,7 @@ function renderAccount() {
     root.replaceChildren(el("section", { class: "card" },
       el("h2", { class: "card-title" }, "Accounts aren't set up yet"),
       el("p", { class: "muted" }, "Your diary is saved on this device only."),
-      exportButton()));
+      exportButton()), faqCard());
     return;
   }
 
@@ -538,7 +634,8 @@ function renderAccount() {
           exportButton(),
           el("button", { onclick: signOut }, "Sign out"))),
       el("section", { class: "card" }, privacy,
-        el("button", { class: "link danger-link", onclick: deleteAccount }, "Delete my account and data")));
+        el("button", { class: "link danger-link", onclick: deleteAccount }, "Delete my account and data")),
+      faqCard());
     return;
   }
 
@@ -568,7 +665,8 @@ function renderAccount() {
         "Sign in with your Hope email to back up your diary and use it on your phone and laptop. " +
         "Anything you've already logged on this device comes with you."),
       form),
-    el("section", { class: "card" }, privacy, exportButton()));
+    el("section", { class: "card" }, privacy, exportButton()),
+    faqCard());
   document.getElementById(account.codeSent ? "acct-code" : "acct-email")?.focus();
 }
 
@@ -623,7 +721,10 @@ function exportButton() {
 }
 
 function exportData() {
-  const data = { exported_at: new Date().toISOString(), goal: loadGoal(), logs: loadLogs(), customFoods: loadCustomFoods() };
+  const data = {
+    exported_at: new Date().toISOString(), goal: loadGoal(), macro_targets: loadMacros(),
+    logs: loadLogs(), customFoods: loadCustomFoods(),
+  };
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
   const a = el("a", { href: url, download: `phelps-tracker-${todayISO()}.json` });
   document.body.append(a);
@@ -656,15 +757,16 @@ async function init() {
   for (const b of document.querySelectorAll("#bottom-nav button")) b.onclick = () => show(b.dataset.view);
 
   const goalDialog = document.getElementById("goal-dialog");
-  document.getElementById("edit-goal").onclick = () => {
-    document.getElementById("goal-input").value = loadGoal();
-    goalDialog.showModal();
-  };
+  document.getElementById("edit-goal").onclick = openGoalDialog;
+  goalDialog.addEventListener("input", renderGoalPreview);
+  document.getElementById("goal-reset").onclick = () => { setGoalMacroInputs(DEFAULT_MACROS); renderGoalPreview(); };
   goalDialog.addEventListener("close", () => {
     if (goalDialog.returnValue === "save") {
       const goal = Number(document.getElementById("goal-input").value);
+      const macros = readGoalMacroInputs();
       saveGoal(goal);
-      Cloud.goalChanged(goal);
+      if (validMacros(macros)) saveMacros(macros);
+      Cloud.profileChanged({ goal, ...loadMacros() });
     }
     refresh();
   });

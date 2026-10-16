@@ -39,6 +39,15 @@ create table if not exists public.profiles (
   updated_at  timestamptz not null default now()
 );
 
+-- Macro targets as % of calories (added after launch, so added with ALTER to keep this re-runnable).
+alter table public.profiles add column if not exists carbs_pct   integer not null default 50;
+alter table public.profiles add column if not exists fat_pct     integer not null default 30;
+alter table public.profiles add column if not exists protein_pct integer not null default 20;
+alter table public.profiles drop constraint if exists macro_pcts_valid;
+alter table public.profiles add constraint macro_pcts_valid check (
+  carbs_pct between 5 and 80 and fat_pct between 5 and 80 and protein_pct between 5 and 80
+  and carbs_pct + fat_pct + protein_pct = 100);
+
 create table if not exists public.food_logs (
   id          uuid primary key,                       -- generated on the device
   user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,

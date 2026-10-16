@@ -121,6 +121,16 @@
       <p class="muted small">Needs vary a lot, especially for athletes. If you're unsure what's right for you,
         Hope's Health Center and athletic trainers can help.</p>
       <label>Calories <input id="goal-input" type="number" min="1200" max="6000" step="50" required></label>
+      <h4 class="dialog-subhead">Macro targets</h4>
+      <p class="muted small">Share of your calories from each. Must add up to 100%.</p>
+      <label>Carbs <span class="pct-field"><input id="goal-carbs" type="number" min="5" max="80" step="1" required> %
+        <span class="muted small" id="goal-carbs-g"></span></span></label>
+      <label>Fat <span class="pct-field"><input id="goal-fat" type="number" min="5" max="80" step="1" required> %
+        <span class="muted small" id="goal-fat-g"></span></span></label>
+      <label>Protein <span class="pct-field"><input id="goal-protein" type="number" min="5" max="80" step="1" required> %
+        <span class="muted small" id="goal-protein-g"></span></span></label>
+      <p class="small" id="goal-total"></p>
+      <button type="button" class="link small" id="goal-reset">Reset to 50 / 30 / 20</button>
       <div class="actions">
         <button value="cancel" formnovalidate>Cancel</button>
         <button value="save" class="primary">Save</button>

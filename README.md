@@ -18,8 +18,10 @@ pick the actual item off today's menu and log it by the serving.
 - **My foods**: create your own foods for anything Phelps doesn't serve.
 - **Quick add**: log calories (and optionally macros) directly.
 - **Week view**: a 7-day calorie chart against your goal, a daily macro table, and averages.
-- **Daily goal**: adjustable, with a reminder that Hope's Health Center and athletic trainers can
-  help figure out what's right for you.
+- **Daily goal and macro targets**: set your calories and how they split between carbs, fat, and
+  protein (as percentages, with the grams shown as you type). Hope's Health Center and athletic
+  trainers can help figure out what's right for you.
+- **FAQ**: answers to common questions, on the Account tab.
 - **Account and sync (optional)**: sign in with your @hope.edu email and a one-time code to back
   up your diary and use it on more than one device. Works offline and syncs when you reconnect.
   Export your data or delete your account any time from the Account tab.

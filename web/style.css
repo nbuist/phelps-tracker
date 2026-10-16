@@ -152,11 +152,26 @@ dialog input, dialog select {
 .week-table tr.day { cursor: pointer; }
 .week-table tr.day:hover td { color: var(--blue); }
 
+/* ---------- goal dialog ---------- */
+.dialog-subhead { margin: 16px 0 2px; font-size: 15px; }
+.pct-field { display: flex; align-items: center; gap: 6px; }
+dialog .pct-field input { width: 64px; }
+.pct-field .small { min-width: 52px; text-align: right; }
+#goal-total.warn { color: var(--warn); }
+
 /* ---------- account ---------- */
 .topbar.no-nav button { visibility: hidden; }
 .actions.start { justify-content: flex-start; flex-wrap: wrap; }
 .danger-link { color: var(--danger); }
 .form-grid input[type="email"], #acct-code { width: 200px; }
+
+/* Plain buttons inside cards (e.g. Export my data) match the dialog buttons. */
+.card button:not(.link):not(.primary) {
+  border: 1px solid var(--line); background: none; color: var(--text); border-radius: 6px; padding: 6px 14px;
+}
+.faq details { border-top: 1px solid var(--line); }
+.faq summary { cursor: pointer; padding: 10px 0; font-weight: 500; }
+.faq details p { margin: 0 0 12px; font-size: 14px; }
 
 /* ---------- bottom nav ---------- */
 body { padding-bottom: 64px; }

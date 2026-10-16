@@ -34,7 +34,7 @@ const Cloud = (() => {
       else localStorage.setItem(key, JSON.stringify(value));
     } catch {}
   }
-  const DATA_KEYS = ["logs", "customFoods", "goal", "outbox", "syncCursor", "dataOwner"];
+  const DATA_KEYS = ["logs", "customFoods", "goal", "macros", "outbox", "syncCursor", "dataOwner"];
 
   function setStatus(state, message = "") {
     status = { state, message, at: Date.now() };
@@ -190,13 +190,15 @@ const Cloud = (() => {
   const logDeleted = (entry) => queue("food_logs", entry.id, logRow(entry, true));
   const customFoodChanged = (food) => queue("custom_foods", food.custom_id, { id: food.custom_id, food, deleted: false });
   const customFoodDeleted = (food) => queue("custom_foods", food.custom_id, { id: food.custom_id, food, deleted: true });
-  const goalChanged = (goal) => queue("profiles", "me", { goal });
+  // profile: { goal, carbs_pct, fat_pct, protein_pct }
+  const profileChanged = (profile) => queue("profiles", "me", profile);
 
   function queueEverything() {
     for (const e of load("logs", [])) logChanged(e);
     for (const f of load("customFoods", [])) customFoodChanged(f);
     const goal = load("goal", null);
-    if (goal != null) goalChanged(goal);
+    const macros = load("macros", null);
+    if (goal != null || macros) profileChanged({ goal: goal ?? 2000, ...(macros || {}) });
   }
 
   async function flush() {
@@ -291,6 +293,9 @@ const Cloud = (() => {
     const profile = (await pullTable("profiles", cursors))[0];
     if (profile && !pending("profiles", "me")) {
       store("goal", profile.goal);
+      if (profile.carbs_pct != null) {
+        store("macros", { carbs_pct: profile.carbs_pct, fat_pct: profile.fat_pct, protein_pct: profile.protein_pct });
+      }
       changed = true;
     }
 
@@ -360,6 +365,6 @@ const Cloud = (() => {
     logDeleted,
     customFoodChanged,
     customFoodDeleted,
-    goalChanged,
+    profileChanged,
   };
 })();
