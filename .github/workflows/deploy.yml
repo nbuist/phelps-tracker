@@ -34,7 +34,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Fetch menus
+      - name: Test menu matching
+        run: python -m unittest -v test_hope_menu
+
+      # Nutrition from FD MealPlanner, checked against Hope Dining's menu feed (see hope_menu.py).
+      - name: Fetch and check menus
         run: |
           pip install -r requirements.txt
           python fetch_phelps.py --days 14

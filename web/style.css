@@ -75,6 +75,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   display: block; width: calc(100% - 24px); margin: 10px 12px; padding: 10px 12px;
   border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); font: inherit;
 }
+.menu-note { margin: 8px 12px 0; }
 .tabs { display: flex; gap: 6px; padding: 0 12px; flex-wrap: wrap; }
 .tabs button {
   border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 4px 12px; font-size: 14px;

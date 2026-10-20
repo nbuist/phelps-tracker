@@ -38,6 +38,7 @@ const state = {
   foods: new Map(), // component_id -> food
   menu: [],
   addMeal: "breakfast", // diary meal we're adding to
+  quickName: "", // name to prefill in Quick add (from a menu item without nutrition)
   source: "menu", // which tab of the add view
   browseMeal: "breakfast", // which Phelps menu is shown in the add view
   editing: null, // log entry being edited in the dialog, or null when adding
@@ -226,10 +227,26 @@ const query = () => document.getElementById("search").value.trim().toLowerCase()
 const matches = (food, q) => !q || food.name.toLowerCase().includes(q);
 
 function foodRow(food, { sub = servingText(food), servings = 1 } = {}) {
+  if (food.no_nutrition) {
+    // On Phelps' menu, but FD MealPlanner has no nutrition for it: log it with Quick add.
+    return el("button", { class: "food-row", onclick: () => openQuickAdd(food.name) },
+      el("div", {}, food.name, el("div", { class: "sub" }, "No nutrition info · tap to enter calories")),
+      el("span", { class: "kcal muted" }, "–"));
+  }
   return el("button", { class: "food-row", onclick: () => openFood(food, null, servings) },
     el("div", {}, food.name, food.needs_review ? el("span", { class: "badge" }, "check") : null,
       el("div", { class: "sub" }, sub)),
     el("span", { class: "kcal" }, `${round(food.calories)} cal`));
+}
+
+// A menu entry -> the food to show. Entries checked against Hope's menu carry Hope's name, tags and
+// allergens; component_id points at FD MealPlanner nutrition, or is null when there's no match.
+function menuFood(m) {
+  const fd = m.component_id != null ? state.foods.get(m.component_id) : null;
+  if (m.component_id != null && !fd) return null;
+  const hope = m.name ? { name: m.name, ...(m.tags?.length ? { dietary_tags: m.tags } : {}),
+    ...(m.allergens?.length ? { allergens: m.allergens } : {}) } : {};
+  return fd ? { ...fd, ...hope } : { no_nutrition: true, dietary_tags: [], allergens: [], ...hope };
 }
 
 function renderMenu() {
@@ -240,9 +257,9 @@ function renderMenu() {
       mealLabel(m, state.date))));
 
   const q = query();
-  const items = state.menu
-    .filter((m) => m.date === state.date && m.meal === state.browseMeal)
-    .map((m) => ({ ...m, food: state.foods.get(m.component_id) }))
+  const mealEntries = state.menu.filter((m) => m.date === state.date && m.meal === state.browseMeal);
+  const items = mealEntries
+    .map((m) => ({ ...m, food: menuFood(m) }))
     .filter((m) => m.food && (m.food.calories || 0) <= HIDE_ABOVE_KCAL && matches(m.food, q));
 
   const list = document.getElementById("menu-list");
@@ -252,16 +269,23 @@ function renderMenu() {
     return;
   }
 
+  // Checked against hope.edu, or FD MealPlanner's early menu (Hope posts about a week ahead).
+  const verified = mealEntries.some((m) => m.verified);
+  const note = verified
+    ? el("p", { class: "menu-note muted small" }, "Matches the menu posted on hope.edu.")
+    : el("p", { class: "menu-note warn small" },
+        "Early menu: Phelps hasn't posted this day on hope.edu yet, so items may change.");
+
   const byStation = new Map();
   for (const it of items) {
     if (!byStation.has(it.station)) byStation.set(it.station, []);
     byStation.get(it.station).push(it);
   }
-  list.replaceChildren(...[...byStation].map(([station, rows]) =>
+  list.replaceChildren(note, ...[...byStation].map(([station, rows]) =>
     el("section", { class: "station" },
       el("h3", {}, station),
       rows
-        .sort((a, b) => b.is_entree - a.is_entree || (a.sort_order ?? 0) - (b.sort_order ?? 0))
+        .sort((a, b) => (b.is_entree ?? 0) - (a.is_entree ?? 0) || (a.sort_order ?? 0) - (b.sort_order ?? 0))
         .map(({ food }) => foodRow(food)))));
 }
 
@@ -311,7 +335,15 @@ function renderCustomFoods() {
             q ? "No matches." : "Add things Phelps doesn't list, like snacks from your room or Kletz.")));
 }
 
+function openQuickAdd(name) {
+  state.quickName = name;
+  state.source = "quick";
+  renderAdd();
+}
+
 function renderQuickAdd() {
+  const prefill = state.quickName || "";
+  state.quickName = "";
   const field = (id, label, attrs = {}) =>
     el("label", {}, label, el("input", { id, type: "number", min: "0", step: "any", ...attrs }));
   const submit = (e) => {
@@ -330,13 +362,15 @@ function renderQuickAdd() {
   };
   document.getElementById("menu-list").replaceChildren(
     el("form", { class: "card form-grid", onsubmit: submit },
-      el("p", { class: "muted small" }, "Know the calories but don't want to look it up? Log them directly."),
+      el("p", { class: "muted small" }, prefill
+        ? `Phelps doesn't publish nutrition for ${prefill}. If you know roughly how many calories it had, log them here.`
+        : "Know the calories but don't want to look it up? Log them directly."),
       field("qa-cal", "Calories", { required: "", min: "1" }),
       field("qa-protein", "Protein (g)"),
       field("qa-carbs", "Carbs (g)"),
       field("qa-fat", "Fat (g)"),
-      el("label", {}, "Label", el("input", { id: "qa-name", maxlength: "60", placeholder: "optional" })),
-      el("div", { class: "actions" }, el("button", { class: "primary", type: "submit" }, `Add to ${cap(state.addMeal)}`))));
+      el("label", {}, "Label", el("input", { id: "qa-name", maxlength: "60", placeholder: "optional", value: prefill })),
+      el("div", { class: "actions" }, el("button", { class: "primary", type: "submit" }, `Add to ${mealLabel(state.addMeal, state.date)}`))));
   document.getElementById("qa-cal").focus();
 }
 
@@ -575,6 +609,13 @@ const FAQ = [
   ["What counts as a serving?",
     "Each item shows its serving size, like \"4 ounce\" or \"1 slice\". If you had more or less, change the " +
     "servings: 1.5 is one and a half servings, 0.5 is half. Dining hall portions vary, so a close estimate is fine."],
+  ["Why do some items say \"No nutrition info\"?",
+    "The menu comes from Hope Dining's website, and the nutrition comes from Phelps' recipe system. Some " +
+    "items, mostly toppings and sauces, are on the menu but have no nutrition published. Tap one to log " +
+    "calories yourself with Quick add."],
+  ["Does the menu match hope.edu?",
+    "Yes, for days Phelps has posted (usually about a week ahead). Further out, the app shows an early menu " +
+    "from Phelps' planning system and says so at the top; it may change once the real menu is posted."],
   ["Something I ate isn't on the menu.",
     "Use \"My foods\" to save things you eat often (snacks, drinks, Kletz items), or \"Quick add\" to log " +
     "calories directly."],
@@ -607,8 +648,9 @@ const FAQ = [
     "Only you. The app stores your email and what you log, nothing else. You can export your data or delete your " +
     "account from this tab at any time."],
   ["Are the nutrition numbers exact?",
-    "They come from Phelps' published menu data, which can contain mistakes, and this app isn't run by Hope " +
-    "Dining Services. Use them as a good estimate."],
+    "They come from Phelps' recipe system, matched to Hope Dining's posted menu by name. Recipes and portions " +
+    "vary, the data can contain mistakes, and this app isn't run by Hope Dining Services, so use them as a " +
+    "good estimate."],
 ];
 
 function faqCard() {

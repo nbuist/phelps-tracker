@@ -1,24 +1,30 @@
 """
-Pull Phelps Dining Hall menus + nutrition from FD MealPlanner (Gordon Food Service).
+Build the app's Phelps menu: nutrition from FD MealPlanner (Gordon Food Service), checked
+against Hope Dining's own menu feed so the menu matches hope.edu (see hope_menu.py).
 
 Usage:
-    pip install requests
+    pip install -r requirements.txt
     python fetch_phelps.py              # next 7 days -> web/phelps_menu.json
     python fetch_phelps.py --days 14
 
-Output JSON has two lists you can load straight into the database (see schema.sql):
-    foods: one row per recipe (componentId), with nutrition PER SERVING and the serving size
-    menu:  which food is served on which date, meal, and station
+Output JSON:
+    foods:  one row per FD recipe (componentId), with nutrition PER SERVING and the serving size
+    menu:   what is served on which date, meal, and station; component_id is null when an item
+            has no FD nutrition match
+    checks: per date and meal, whether it was verified against Hope's menu and how well it matched
 
-Be a good citizen: this makes one request per meal period per month, so run it
-once a day at most and serve your app from your own database.
+Be a good citizen: this makes one request per FD meal period per month plus one to Hope,
+so run it once a day at most.
 """
 import argparse
 import json
+import os
 import time
 from datetime import date, timedelta
 
 import requests
+
+import hope_menu
 
 TENANT, ACCOUNT, LOCATION = 7, 10033, 10112  # Hope College / Phelps Dining Hall
 MEALS_URL = f"https://apiservicelocatorstenant.fdmealplanner.com/api/v1/data-locator-webapi/{TENANT}/meals"
@@ -29,6 +35,11 @@ HEADERS = {
 }
 # 3 is confirmed as dinner ("Phelps Dinner ..." in the response). Check 1 and 2.
 MEAL_PERIODS = {1: "breakfast", 2: "lunch", 3: "dinner"}
+
+# FD foods from this many days back are kept as a nutrition library, so items whose FD menu cycle
+# has ended (e.g. breakfast between cycles) can still be matched by name.
+LIBRARY_DAYS_BACK = 35
+ALIASES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "name_aliases.json")
 
 # Items above this per-serving calorie count, or with no serving size, get
 # flagged for a human to check (the salad-bar dressings come back with
@@ -142,6 +153,19 @@ def parse_day(row, meal_name, concepts):
     return foods, menu
 
 
+def fetch_hope_feed():
+    resp = requests.get(hope_menu.HOPE_FEED_URL, params={"t": int(time.time() * 1000)},
+                        headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def load_aliases():
+    with open(ALIASES_FILE, encoding="utf-8") as f:
+        raw = json.load(f)
+    return {hope_menu.norm(k): v for k, v in raw.items() if not k.startswith("_")}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=7)
@@ -150,37 +174,71 @@ def main():
 
     start = date.today()
     end = start + timedelta(days=args.days - 1)
-    all_foods, all_menu = {}, []
+    lib_start = start - timedelta(days=LIBRARY_DAYS_BACK)
+    all_foods, fd_menu = {}, []
 
     for period_id, meal_name in MEAL_PERIODS.items():
-        rows = fetch_rows(period_id, start, end)
+        rows = fetch_rows(period_id, lib_start, end)
         # Station names (conceptData) only come back on some days' rows, so pool them.
         concepts = [c for row in rows for c in row.get("conceptData") or []]
-        for row in rows:
+        for row in sorted(rows, key=lambda r: r.get("strMenuForDate", "")):
             day = row.get("strMenuForDate", "")
-            if not (start.isoformat() <= day <= end.isoformat()):
-                continue
             foods, menu = parse_day(row, meal_name, concepts)
-            all_foods.update(foods)
-            # The same recipe can appear at two stations; keep one entry per station.
-            seen = {(m["date"], m["meal"], m["station"], m["component_id"]) for m in all_menu}
-            all_menu += [m for m in menu if (m["date"], m["meal"], m["station"], m["component_id"]) not in seen]
+            all_foods.update(foods)  # later days win, so nutrition is the most recent version
+            if start.isoformat() <= day <= end.isoformat():
+                # The same recipe can appear at two stations; keep one entry per station.
+                seen = {(m["date"], m["meal"], m["station"], m["component_id"]) for m in fd_menu}
+                fd_menu += [m for m in menu if (m["date"], m["meal"], m["station"], m["component_id"]) not in seen]
 
-    with open(args.out, "w") as f:
-        json.dump({"foods": list(all_foods.values()), "menu": all_menu}, f, indent=2)
+    try:
+        feed = fetch_hope_feed()
+    except (requests.RequestException, ValueError) as e:
+        feed = None
+        print(f"::warning title=Hope menu unavailable::Couldn't load Hope Dining's menu feed ({e}). "
+              "Using FD MealPlanner's menu, unverified.")
+    menu, checks = hope_menu.reconcile(list(all_foods.values()), fd_menu, feed, load_aliases(),
+                                       start.isoformat(), end.isoformat())
 
-    flagged = [f["name"] for f in all_foods.values() if f["needs_review"]]
-    print(f"{len(all_foods)} foods, {len(all_menu)} menu entries -> {args.out}")
-    # Menus are published in cycles (e.g. "Phelps Bfast 9.28-10.18"). When one ends before the next
-    # is posted, that meal comes back empty; flag it so it shows up on the GitHub Actions run.
-    for meal_name in MEAL_PERIODS.values():
-        days = sorted({m["date"] for m in all_menu if m["meal"] == meal_name})
-        print(f"{meal_name}: {len(days)} of {args.days} days")
-        if not days:
-            print(f"::warning title=No {meal_name} menu::Phelps returned no {meal_name} items for "
-                  f"{start} to {end}. The menu cycle probably ended and the next one isn't posted yet.")
-    if flagged:
-        print(f"{len(flagged)} need a manual check: {', '.join(sorted(flagged))}")
+    # Ship only the foods the menu uses (the library is just for matching).
+    used = {m["component_id"] for m in menu if m.get("component_id") is not None}
+    foods_out = [f for f in all_foods.values() if f["component_id"] in used]
+    with open(args.out, "w", encoding="utf-8") as f:
+        json.dump({"foods": foods_out, "menu": menu, "checks": list(checks.values())}, f, indent=2)
+
+    print(f"{len(foods_out)} foods, {len(menu)} menu entries -> {args.out}")
+    report(checks, start, end)
+
+
+def report(checks, start, end):
+    """Print the menu check and raise GitHub Actions warnings for things worth a look."""
+    print("\nMenu check (Hope's menu vs FD MealPlanner):")
+    verified = [c for c in checks.values() if c["source"] == "hope"]
+    for c in checks.values():
+        if c["source"] == "hope":
+            print(f"  {c['date']} {c['meal']:9} verified: {c['matched']}/{c['items']} items have nutrition"
+                  + (f"; {len(c['fd_only'])} FD items not on Hope's menu" if c["fd_only"] else ""))
+        else:
+            print(f"  {c['date']} {c['meal']:9} FD only ({c['reason']}): {c['items']} items")
+    if not verified:
+        print("::warning title=Menu not verified::No meals could be checked against Hope's menu.")
+    else:
+        items = sum(c["items"] for c in verified)
+        matched = sum(c["matched"] for c in verified)
+        print(f"\n{len(verified)} meals verified; {matched}/{items} items ({matched / items:.0%}) have nutrition.")
+        for c in verified:
+            if c["items"] >= 5 and c["matched"] / c["items"] < 0.3:
+                print(f"::warning title=Low nutrition match {c['date']} {c['meal']}::Only {c['matched']} of "
+                      f"{c['items']} items on Hope's menu matched FD MealPlanner nutrition.")
+        unmatched = sorted({n for c in verified for n in c["unmatched"]})
+        if unmatched:
+            print(f"No nutrition match ({len(unmatched)}; add to name_aliases.json if an FD food fits): "
+                  + ", ".join(unmatched))
+    # Menus are published in cycles (e.g. "Phelps Bfast 9.28-10.18"). A meal missing from both
+    # sources for the whole range usually means a cycle ended and the next isn't posted.
+    for meal in MEAL_PERIODS.values():
+        if not any(c["meal"] == meal for c in checks.values()):
+            print(f"::warning title=No {meal} menu::Neither Hope nor FD MealPlanner listed {meal} "
+                  f"for {start} to {end}.")
 
 
 if __name__ == "__main__":

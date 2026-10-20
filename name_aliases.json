@@ -1,0 +1,8 @@
+{
+  "_about": "Hope menu name (as on hope.edu, any case) -> FD MealPlanner food name to take nutrition from. Use \"-\" to say an item has no FD equivalent. Checked by hand; add entries when the daily report lists an item as unmatched.",
+  "beef chili": "Chili",
+  "beef burgers": "Hamburger Patties",
+  "spaghetti": "Spaghetti Noodles",
+  "macaroni": "Macaroni Noodles",
+  "farfalle": "Farfalle Noodles"
+}

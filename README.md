@@ -53,7 +53,10 @@ account), so it's safe to use on a shared computer.
 
 | Path | What it is |
 |---|---|
-| `fetch_phelps.py` | Downloads Phelps menus and nutrition and writes `web/phelps_menu.json` (`foods` + `menu`). |
+| `fetch_phelps.py` | Downloads the menu and nutrition, checks them against each other, and writes `web/phelps_menu.json`. |
+| `hope_menu.py` | Reads Hope Dining's menu and matches each item to its nutrition by name. |
+| `name_aliases.json` | Hand-checked name matches for items the automatic matching misses. |
+| `test_hope_menu.py` | Tests for the matching (run before every deploy). |
 | `web/` | The app: plain HTML, CSS, and JavaScript with no build step. Includes a web app manifest, icons, and a service worker (`sw.js`) for install and offline use. |
 | `web/cloud.js` | Sign-in and sync. |
 | `schema.sql` | Database tables and the rules that keep each student's data private. |
@@ -63,10 +66,18 @@ account), so it's safe to use on a shared computer.
 
 ## Data source
 
-Menus come from FD MealPlanner (Gordon Food Service's menu platform), the same public data behind
-the [Phelps menu calendar](https://www.fdmealplanner.com/pages/calendar/?tenantId=7&accountId=10033&locationId=10112&mealPeriodId=3).
-The fetcher makes one request per meal per month and the app only reads the saved file, so
-traffic to their servers stays minimal.
+- **The menu** (what's served, at which station, for each meal) comes from Hope Dining's
+  [Phelps menu page](https://hope.edu/offices/dining-services/menus-locations/phelps.html), so the
+  app matches what's posted there. Hope posts about a week ahead; days further out show an early
+  menu from FD MealPlanner, marked as such in the app.
+- **Nutrition** comes from FD MealPlanner (Gordon Food Service's menu platform), the same public data
+  behind the [Phelps menu calendar](https://www.fdmealplanner.com/pages/calendar/?tenantId=7&accountId=10033&locationId=10112&mealPeriodId=3).
+  Each item on Hope's menu is matched to an FD recipe by name. Items with no match, mostly toppings
+  and sauces, show "No nutrition info" and can be logged with Quick add.
+
+Every daily run reports how well the two line up (on the GitHub Actions run page) and warns when
+Hope's menu can't be reached or a meal matches poorly. Each source gets a handful of requests a day,
+and the app only reads the saved file.
 
 ### Known data issues
 
