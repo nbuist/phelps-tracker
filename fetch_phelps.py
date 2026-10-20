@@ -171,6 +171,14 @@ def main():
 
     flagged = [f["name"] for f in all_foods.values() if f["needs_review"]]
     print(f"{len(all_foods)} foods, {len(all_menu)} menu entries -> {args.out}")
+    # Menus are published in cycles (e.g. "Phelps Bfast 9.28-10.18"). When one ends before the next
+    # is posted, that meal comes back empty; flag it so it shows up on the GitHub Actions run.
+    for meal_name in MEAL_PERIODS.values():
+        days = sorted({m["date"] for m in all_menu if m["meal"] == meal_name})
+        print(f"{meal_name}: {len(days)} of {args.days} days")
+        if not days:
+            print(f"::warning title=No {meal_name} menu::Phelps returned no {meal_name} items for "
+                  f"{start} to {end}. The menu cycle probably ended and the next one isn't posted yet.")
     if flagged:
         print(f"{len(flagged)} need a manual check: {', '.join(sorted(flagged))}")
 

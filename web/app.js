@@ -3,6 +3,10 @@
 
 const MEALS = ["breakfast", "lunch", "dinner", "snacks"];
 const MENU_MEALS = ["breakfast", "lunch", "dinner"]; // what Phelps actually serves
+// Phelps serves no breakfast on Sundays; the lunch period is brunch. Logs still store "lunch".
+const isSunday = (iso) => new Date(iso + "T12:00:00").getDay() === 0;
+const mealLabel = (meal, iso) => (meal === "lunch" && isSunday(iso) ? "Brunch" : cap(meal));
+const menuMealsFor = (iso) => (isSunday(iso) ? MENU_MEALS.filter((m) => m !== "breakfast") : MENU_MEALS);
 const SOURCES = [
   { key: "menu", label: "Phelps menu" },
   { key: "recent", label: "Recent" },
@@ -182,7 +186,7 @@ function renderDiary() {
   document.getElementById("meals").replaceChildren(...MEALS.map((meal) => {
     const entries = logs.filter((l) => l.meal === meal);
     return el("section", { class: "meal" },
-      el("h2", {}, cap(meal), el("span", {}, round(totals(entries).calories))),
+      el("h2", {}, mealLabel(meal, state.date), el("span", {}, round(totals(entries).calories))),
       entries.map((l) => el("button", { class: "entry", onclick: () => openFood(l.food, l) },
         el("div", {}, l.food.name,
           el("div", { class: "sub" }, l.food.quick ? "Quick add" : `${+l.servings} × ${servingText(l.food)}`)),
@@ -198,7 +202,7 @@ function openAdd(meal) {
   // For snacks, default to whatever's being served at this time of day.
   const hour = new Date().getHours();
   state.browseMeal = meal !== "snacks" ? meal : hour < 11 ? "breakfast" : hour < 16 ? "lunch" : "dinner";
-  document.getElementById("add-title").textContent = `Add to ${cap(meal)}`;
+  document.getElementById("add-title").textContent = `Add to ${mealLabel(meal, state.date)}`;
   document.getElementById("search").value = "";
   show("add");
 }
@@ -229,9 +233,11 @@ function foodRow(food, { sub = servingText(food), servings = 1 } = {}) {
 }
 
 function renderMenu() {
-  document.getElementById("add-meal-tabs").replaceChildren(...MENU_MEALS.map((m) =>
+  const meals = menuMealsFor(state.date);
+  if (!meals.includes(state.browseMeal)) state.browseMeal = "lunch"; // Sunday breakfast -> brunch
+  document.getElementById("add-meal-tabs").replaceChildren(...meals.map((m) =>
     el("button", { class: m === state.browseMeal ? "active" : "", onclick: () => { state.browseMeal = m; renderMenu(); } },
-      cap(m))));
+      mealLabel(m, state.date))));
 
   const q = query();
   const items = state.menu
@@ -242,7 +248,7 @@ function renderMenu() {
   const list = document.getElementById("menu-list");
   if (!items.length) {
     list.replaceChildren(el("p", { class: "muted center" },
-      q ? "No matches." : `No Phelps ${state.browseMeal} menu for ${prettyDate(state.date).toLowerCase()}.`));
+      q ? "No matches." : emptyMenuMessage()));
     return;
   }
 
@@ -257,6 +263,17 @@ function renderMenu() {
       rows
         .sort((a, b) => b.is_entree - a.is_entree || (a.sort_order ?? 0) - (b.sort_order ?? 0))
         .map(({ food }) => foodRow(food)))));
+}
+
+// Menus are published in cycles a few weeks at a time, so a missing meal usually means the next
+// cycle isn't posted yet.
+function emptyMenuMessage() {
+  const label = mealLabel(state.browseMeal, state.date).toLowerCase();
+  const pd = prettyDate(state.date);
+  const when = ["Today", "Yesterday", "Tomorrow"].includes(pd) ? pd.toLowerCase() : pd;
+  const hasAnyMenu = state.menu.some((m) => m.date === state.date);
+  if (!hasAnyMenu) return `Phelps hasn't posted menus for ${when} yet. You can still use My foods or Quick add.`;
+  return `Phelps hasn't posted the ${label} menu for ${when} yet. You can still use My foods or Quick add.`;
 }
 
 function renderRecent() {
@@ -377,7 +394,7 @@ function openFood(food, entry, servings = 1) {
   document.getElementById("fd-warn").hidden = !food.needs_review;
   document.getElementById("fd-servings").value = entry ? entry.servings : servings;
   const mealSel = document.getElementById("fd-meal");
-  mealSel.replaceChildren(...MEALS.map((m) => el("option", { value: m }, cap(m))));
+  mealSel.replaceChildren(...MEALS.map((m) => el("option", { value: m }, mealLabel(m, entry ? entry.date : state.date))));
   mealSel.value = entry ? entry.meal : state.addMeal;
   document.getElementById("fd-delete").hidden = !entry;
   document.getElementById("fd-save").textContent = entry ? "Save" : "Add";
@@ -565,8 +582,8 @@ const FAQ = [
     "The menu data for that item looks off (for example, it has no serving size), so treat its numbers as a rough " +
     "guess. Items with obviously wrong numbers, like whole bottles of dressing, are hidden."],
   ["Why is there no menu for a day or meal?",
-    "Phelps posts menus about two weeks ahead. If a meal is missing, it hasn't been posted yet or isn't served " +
-    "that day."],
+    "Phelps posts menus a few weeks at a time. If a meal is missing, the next menu hasn't been posted yet. " +
+    "On Sundays there's no breakfast: brunch is listed under Brunch, in place of lunch."],
   ["How do I change my calorie goal or macros?",
     "On the Diary, tap \"Edit goal\". Macro targets are a share of your calories and must add up to 100%. " +
     "Carbs and protein have 4 calories per gram and fat has 9, which is how the gram targets are worked out."],
