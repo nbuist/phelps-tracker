@@ -1,5 +1,5 @@
-// Phelps tracker. Reads phelps_menu.json (from fetch_phelps.py) and keeps the
-// food diary in localStorage. Swap the storage functions for Supabase later.
+// Phelps tracker. Reads phelps_menu.json (built daily by fetch_phelps.py) and keeps the food
+// diary in localStorage; cloud.js syncs it to the signed-in account.
 
 const MEALS = ["breakfast", "lunch", "dinner", "snacks"];
 const MENU_MEALS = ["breakfast", "lunch", "dinner"]; // what Phelps actually serves
@@ -33,7 +33,7 @@ const HIDE_ABOVE_KCAL = 1000;
 const RECENT_LIMIT = 30;
 
 const state = {
-  view: "diary", // diary | add | week
+  view: "diary", // diary | add | week | account
   date: todayISO(),
   foods: new Map(), // component_id -> food
   menu: [],
@@ -46,7 +46,7 @@ const state = {
   editingCustom: null, // custom food being edited, or null when creating
 };
 
-// ---------- storage (localStorage for now) ----------
+// ---------- storage (localStorage; cloud.js syncs it when signed in) ----------
 
 function load(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
@@ -110,6 +110,14 @@ function foodKey(f) {
   if (f.quick) return null;
   return f.custom ? `c:${f.custom_id}` : `p:${f.component_id}`;
 }
+// Open a <dialog> with a clean result. Browsers keep the last returnValue, so without this,
+// closing with Escape would repeat whatever the previous Save or Delete did.
+function openDialog(id) {
+  const dialog = document.getElementById(id);
+  dialog.returnValue = "";
+  dialog.showModal();
+}
+
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -242,8 +250,14 @@ function foodRow(food, { sub = servingText(food), servings = 1 } = {}) {
 // A menu entry -> the food to show. Entries checked against Hope's menu carry Hope's name, tags and
 // allergens; component_id points at FD MealPlanner nutrition, or is null when there's no match.
 function menuFood(m) {
-  const fd = m.component_id != null ? state.foods.get(m.component_id) : null;
+  let fd = m.component_id != null ? state.foods.get(m.component_id) : null;
   if (m.component_id != null && !fd) return null;
+  // Whole-container numbers (see HIDE_ABOVE_KCAL): an item Hope lists is still served, so show it
+  // without nutrition; FD's own early menu just leaves these out.
+  if (fd && (fd.calories || 0) > HIDE_ABOVE_KCAL) {
+    if (!m.verified) return null;
+    fd = null;
+  }
   const hope = m.name ? { name: m.name, ...(m.tags?.length ? { dietary_tags: m.tags } : {}),
     ...(m.allergens?.length ? { allergens: m.allergens } : {}) } : {};
   return fd ? { ...fd, ...hope } : { no_nutrition: true, dietary_tags: [], allergens: [], ...hope };
@@ -260,7 +274,7 @@ function renderMenu() {
   const mealEntries = state.menu.filter((m) => m.date === state.date && m.meal === state.browseMeal);
   const items = mealEntries
     .map((m) => ({ ...m, food: menuFood(m) }))
-    .filter((m) => m.food && (m.food.calories || 0) <= HIDE_ABOVE_KCAL && matches(m.food, q));
+    .filter((m) => m.food && matches(m.food, q));
 
   const list = document.getElementById("menu-list");
   if (!items.length) {
@@ -388,7 +402,7 @@ function openCustom(food) {
   set("cf-carbs", food?.carbs_g);
   set("cf-fat", food?.fat_g);
   document.getElementById("cf-delete").hidden = !food;
-  document.getElementById("custom-dialog").showModal();
+  openDialog("custom-dialog");
 }
 
 function onCustomDialogClose() {
@@ -435,7 +449,7 @@ function openFood(food, entry, servings = 1) {
   const tags = [...(food.dietary_tags || []), ...(food.allergens || []).map((a) => `contains ${a}`)];
   document.getElementById("fd-tags").textContent = tags.join(" · ");
   renderNutrition();
-  document.getElementById("food-dialog").showModal();
+  openDialog("food-dialog");
 }
 
 function renderNutrition() {
@@ -582,7 +596,7 @@ function openGoalDialog() {
   document.getElementById("goal-input").value = loadGoal();
   setGoalMacroInputs(loadMacros());
   renderGoalPreview();
-  document.getElementById("goal-dialog").showModal();
+  openDialog("goal-dialog");
 }
 
 // Live grams per macro, the running total, and blocking Save until it adds up to 100%.
@@ -794,16 +808,40 @@ function exportData() {
 
 // ---------- wiring ----------
 
-async function init() {
+const MENU_MAX_AGE_MS = 3 * 60 * 60 * 1000; // reload the menu when the app comes back after this long
+let menuLoadedAt = 0;
+let openedOn = todayISO(); // the day the app last showed "today"
+
+async function loadMenu() {
   try {
     const res = await fetch("phelps_menu.json");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    for (const f of data.foods) state.foods.set(f.component_id, f);
+    state.foods = new Map(data.foods.map((f) => [f.component_id, f]));
     state.menu = data.menu;
+    menuLoadedAt = Date.now();
+    document.getElementById("status").textContent = "";
   } catch (e) {
-    document.getElementById("status").textContent =
-      "Couldn't load the menu. Check your connection, or locally run fetch_phelps.py and `python -m http.server -d web`.";
+    if (!state.menu.length) {
+      document.getElementById("status").textContent = "Couldn't load the Phelps menu. Check your connection and reopen the app.";
+    }
   }
+}
+
+// When the app comes back to the screen (installed apps can stay open for days): if it was showing
+// today and the day has changed, move to the new today, and refresh an old menu.
+async function onResume() {
+  const today = todayISO();
+  if (today !== openedOn) {
+    if (state.date === openedOn) state.date = today;
+    openedOn = today;
+  }
+  if (Date.now() - menuLoadedAt > MENU_MAX_AGE_MS) await loadMenu();
+  refresh();
+}
+
+async function init() {
+  await loadMenu();
 
   const step = () => (state.view === "week" ? 7 : 1);
   document.getElementById("prev-day").onclick = () => { state.date = shiftDate(state.date, -step()); refresh(); };
@@ -830,6 +868,9 @@ async function init() {
     refresh();
   });
 
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") onResume();
+  });
   Cloud.onData(refresh); // a sync brought in changes from another device
   Cloud.onStatus(() => { if (state.view === "account") renderAccount(); });
   show("diary");

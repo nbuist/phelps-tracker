@@ -109,6 +109,12 @@ class Reconcile(unittest.TestCase):
         day2 = [m for m in menu if m["date"] == "2026-10-21"]
         self.assertEqual([(m["component_id"], m["verified"]) for m in day2], [(3, False)])
 
+    def test_unreadable_feed_raises(self):
+        # fetch_phelps.py catches this and falls back to FD's menu with a warning.
+        broken = [{"name": "phelps", "hours": [{"name": "Dinner"}], "menus": []}]
+        with self.assertRaises(Exception):
+            H.reconcile([], [], broken, {}, "2026-10-20", "2026-10-20")
+
     def test_feed_unavailable_falls_back_to_fd(self):
         fd_foods = [{"component_id": 1, "name": "Pot Roast"}]
         fd_menu = [{"date": "2026-10-20", "meal": "dinner", "station": "Zone", "component_id": 1}]

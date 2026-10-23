@@ -168,7 +168,9 @@ const Cloud = (() => {
 
   // outbox: { "<table>:<id>": { table, row, v } }; v lets us tell if it changed during an upload.
   function queue(table, id, row) {
-    if (!configured) return;
+    // Before the first sign-in there's nothing to sync to, and signing in uploads the whole diary
+    // anyway, so don't keep (and later upload) a trail of changes, like entries deleted back then.
+    if (!configured || !load("dataOwner", null)) return;
     const outbox = load("outbox", {});
     const key = `${table}:${id}`;
     outbox[key] = { table, row, v: (outbox[key]?.v || 0) + 1 };

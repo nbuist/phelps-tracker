@@ -2,8 +2,7 @@
 Build the app's Phelps menu: nutrition from FD MealPlanner (Gordon Food Service), checked
 against Hope Dining's own menu feed so the menu matches hope.edu (see hope_menu.py).
 
-Usage:
-    pip install -r requirements.txt
+Usage (Python 3.9+, standard library only):
     python fetch_phelps.py              # next 7 days -> web/phelps_menu.json
     python fetch_phelps.py --days 14
 
@@ -20,21 +19,39 @@ import argparse
 import json
 import os
 import time
-from datetime import date, timedelta
-
-import requests
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
 
 import hope_menu
 
 TENANT, ACCOUNT, LOCATION = 7, 10033, 10112  # Hope College / Phelps Dining Hall
 MEALS_URL = f"https://apiservicelocatorstenant.fdmealplanner.com/api/v1/data-locator-webapi/{TENANT}/meals"
 HEADERS = {
-    "User-Agent": "HopeMacros/0.1 (student project; contact: YOUR_EMAIL_HERE)",
+    "User-Agent": "PhelpsTracker/1.0 (student project; +https://github.com/nbuist/phelps-tracker)",
     "Accept": "application/json",
     "x-jsonresponsecase": "camel",
 }
-# 3 is confirmed as dinner ("Phelps Dinner ..." in the response). Check 1 and 2.
-MEAL_PERIODS = {1: "breakfast", 2: "lunch", 3: "dinner"}
+MEAL_PERIODS = {1: "breakfast", 2: "lunch", 3: "dinner"}  # FD mealPeriodId -> meal (confirmed)
+
+
+def today_in_holland():
+    """Today's date at Hope (Eastern time). The deploy server runs on UTC, so using its date
+    would make an evening deploy start the menu at tomorrow and drop today's."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/New_York")).date()
+    except Exception:  # no time zone database (e.g. some Windows installs): EST is close enough
+        return datetime.now(timezone(timedelta(hours=-5))).date()
+
+
+def get_json(url, params=None):
+    """GET a URL and parse JSON, with the project's headers and a timeout."""
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    with urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=30) as resp:
+        return json.load(resp)
 
 # FD foods from this many days back are kept as a nutrition library, so items whose FD menu cycle
 # has ended (e.g. breakfast between cycles) can still be matched by name.
@@ -71,24 +88,18 @@ def month_spans(start, end):
 def fetch_rows(meal_period_id, start, end):
     rows = []
     for s, e in month_spans(start, end):
-        resp = requests.get(
-            MEALS_URL,
-            params={
-                "menuId": 0,
-                "accountId": ACCOUNT,
-                "locationId": LOCATION,
-                "mealPeriodId": meal_period_id,
-                "tenantId": TENANT,
-                "monthId": f"{s.month:02d}",
-                "startDate": s.strftime("%Y/%m/%d"),
-                "endDate": e.strftime("%Y/%m/%d"),
-                "timeOffset": 0,
-            },
-            headers=HEADERS,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        rows.extend(resp.json().get("result") or [])
+        data = get_json(MEALS_URL, {
+            "menuId": 0,
+            "accountId": ACCOUNT,
+            "locationId": LOCATION,
+            "mealPeriodId": meal_period_id,
+            "tenantId": TENANT,
+            "monthId": f"{s.month:02d}",
+            "startDate": s.strftime("%Y/%m/%d"),
+            "endDate": e.strftime("%Y/%m/%d"),
+            "timeOffset": 0,
+        })
+        rows.extend(data.get("result") or [])
         time.sleep(1)
     return rows
 
@@ -154,10 +165,7 @@ def parse_day(row, meal_name, concepts):
 
 
 def fetch_hope_feed():
-    resp = requests.get(hope_menu.HOPE_FEED_URL, params={"t": int(time.time() * 1000)},
-                        headers=HEADERS, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+    return get_json(hope_menu.HOPE_FEED_URL, {"t": int(time.time() * 1000)})
 
 
 def load_aliases():
@@ -172,7 +180,7 @@ def main():
     ap.add_argument("--out", default="web/phelps_menu.json")
     args = ap.parse_args()
 
-    start = date.today()
+    start = today_in_holland()
     end = start + timedelta(days=args.days - 1)
     lib_start = start - timedelta(days=LIBRARY_DAYS_BACK)
     all_foods, fd_menu = {}, []
@@ -192,12 +200,17 @@ def main():
 
     try:
         feed = fetch_hope_feed()
-    except (requests.RequestException, ValueError) as e:
+    except (OSError, ValueError) as e:  # network errors and bad JSON
         feed = None
         print(f"::warning title=Hope menu unavailable::Couldn't load Hope Dining's menu feed ({e}). "
               "Using FD MealPlanner's menu, unverified.")
-    menu, checks = hope_menu.reconcile(list(all_foods.values()), fd_menu, feed, load_aliases(),
-                                       start.isoformat(), end.isoformat())
+    fd_data = (list(all_foods.values()), fd_menu)
+    try:
+        menu, checks = hope_menu.reconcile(*fd_data, feed, load_aliases(), start.isoformat(), end.isoformat())
+    except Exception as e:  # Hope changed its feed's format: keep the site up with FD's menu
+        print(f"::warning title=Hope menu unreadable::Couldn't read Hope Dining's menu feed "
+              f"({type(e).__name__}: {e}). Using FD MealPlanner's menu, unverified.")
+        menu, checks = hope_menu.reconcile(*fd_data, None, {}, start.isoformat(), end.isoformat())
 
     # Ship only the foods the menu uses (the library is just for matching).
     used = {m["component_id"] for m in menu if m.get("component_id") is not None}

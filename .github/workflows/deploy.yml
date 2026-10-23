@@ -9,21 +9,19 @@ on:
     - cron: "0 10 * * *" # 10:00 UTC = 6 AM Eastern (5 AM in winter)
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# Nothing by default; each job asks for only what it needs.
+permissions: {}
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  # Runs our code on outside data (FD MealPlanner, Hope's feed), so it can only read the repo.
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
     # Actions are pinned to exact commits (tags can be moved); Dependabot proposes updates.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,18 +36,30 @@ jobs:
         run: python -m unittest -v test_hope_menu
 
       # Nutrition from FD MealPlanner, checked against Hope Dining's menu feed (see hope_menu.py).
+      # Standard library only: nothing is installed from PyPI.
       - name: Fetch and check menus
-        run: |
-          pip install -r requirements.txt
-          python fetch_phelps.py --days 14
+        run: python fetch_phelps.py --days 14
 
       # Give the service worker a new cache name per commit so phones pick up app changes.
       - name: Stamp service worker version
-        run: sed -i "s/const VERSION = \"v1\"/const VERSION = \"${GITHUB_SHA::7}\"/" web/sw.js
+        run: |
+          sed -i "s/const VERSION = \"v1\"/const VERSION = \"${GITHUB_SHA::7}\"/" web/sw.js
+          grep -q "const VERSION = \"${GITHUB_SHA::7}\"" web/sw.js || { echo "::error::sw.js VERSION wasn't stamped"; exit 1; }
 
-      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: web
+
+  # Only this job can publish, and it runs none of our code.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

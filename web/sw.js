@@ -16,7 +16,11 @@ const SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: "reload" skips the browser's HTTP cache (GitHub Pages allows 10 minutes), so a new version
+  // never saves stale copies of the old files.
+  event.waitUntil(caches.open(VERSION)
+    .then((cache) => cache.addAll(SHELL.map((url) => new Request(url, { cache: "reload" }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
@@ -35,8 +39,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(event.request, { cache: "no-store" })
         .then((res) => {
-          const copy = res.clone();
-          caches.open(VERSION).then((cache) => cache.put(event.request, copy));
+          if (res.ok) {  // never replace the good offline copy with an error page
+            const copy = res.clone();
+            caches.open(VERSION).then((cache) => cache.put(event.request, copy));
+          }
           return res;
         })
         .catch(() => caches.match(event.request)));
